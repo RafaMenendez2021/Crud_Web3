@@ -5,7 +5,15 @@ pub struct Gestor {
     pub autoridad: Pubkey,
     pub total_recetas: u64,
     pub total_tickets: u64,
-    pub ingresos_totales: u64, // Dinero total recaudado en SOL (lamports)
+    pub ingresos_totales: u64,
+}
+
+// ¡NUEVO! Estructura dinámica para los ingredientes
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Default)]
+pub struct Ingrediente {
+    pub nombre: String,
+    pub cantidad: u32,      // gramos, mililitros o piezas
+    pub costo_unitario: u64, // en centavos (o lamports)
 }
 
 #[account]
@@ -13,11 +21,12 @@ pub struct Receta {
     pub gestor: Pubkey,
     pub id: u64,
     pub nombre_pan: String,
-    pub costo_produccion: u64,
+    pub costo_produccion: u64, // Ahora se calcula automáticamente
     pub precio_venta: u64,
     pub piezas: u8,
     pub inventario_disponible: u32,
-    pub activo: bool, // Controla si la receta está en uso (Soft Delete)
+    pub activo: bool,
+    pub ingredientes: Vec<Ingrediente>, // ¡NUEVO! Lista de ingredientes
 }
 
 #[account]
@@ -28,7 +37,7 @@ pub struct Ticket {
     pub receta_id: u64,
     pub cantidad: u8,
     pub ganancia: u64,
-    pub pago_fiat: bool, // true = pago en efectivo/tarjeta, false = pago en SOL
+    pub pago_fiat: bool,
 }
 
 #[error_code]

@@ -18,11 +18,11 @@ pub mod panaderia_pda {
     pub fn crear_receta(
         ctx: Context<CrearReceta>,
         nombre_pan: String,
-        costo_produccion: u64,
         precio_venta: u64,
         piezas: u8,
+        ingredientes: Vec<Ingrediente>, // Recibimos la lista
     ) -> Result<()> {
-        handler_crear_receta(ctx, nombre_pan, costo_produccion, precio_venta, piezas)
+        handler_crear_receta(ctx, nombre_pan, precio_venta, piezas, ingredientes)
     }
 
     pub fn hornear_pan(ctx: Context<HornearPan>, lotes: u8) -> Result<()> {
@@ -40,10 +40,10 @@ pub mod panaderia_pda {
 
     pub fn actualizar_receta(
         ctx: Context<ActualizarReceta>,
-        nuevo_costo_produccion: u64,
         nuevo_precio_venta: u64,
+        nuevos_ingredientes: Vec<Ingrediente>, // Para editar info
     ) -> Result<()> {
-        handler_actualizar_receta(ctx, nuevo_costo_produccion, nuevo_precio_venta)
+        handler_actualizar_receta(ctx, nuevo_precio_venta, nuevos_ingredientes)
     }
 
     pub fn borrar_receta(ctx: Context<BorrarReceta>) -> Result<()> {

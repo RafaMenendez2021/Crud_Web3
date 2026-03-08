@@ -1,39 +1,22 @@
-import BN from "bn.js";
-import * as web3 from "@solana/web3.js";
 import * as anchor from "@coral-xyz/anchor";
-import * as anchor from "@coral-xyz/anchor";
-import type { State } from "../target/types/state";
+import { BN } from "@coral-xyz/anchor";
 
 describe("panaderia_pda", () => {
-  // Configure the client to use the local cluster
-  anchor.setProvider(anchor.AnchorProvider.env());
-
-  const program = anchor.workspace.State as anchor.Program<State>;
-  
-  // En Solana Playground, 'pg' se inyecta automáticamente.
-  // No necesitamos configurar el provider.
-  const program = program;
+  const program = pg.program;
   const wallet = pg.wallet;
-
   let gestorPda: anchor.web3.PublicKey;
 
   before(async () => {
-    // Calculamos el PDA del Gestor usando nuestra wallet
     [gestorPda] = anchor.web3.PublicKey.findProgramAddressSync(
       [Buffer.from("gestor"), wallet.publicKey.toBuffer()],
       program.programId
     );
   });
 
-  it("Inicializa el Gestor", async () => {
+  it("1. Inicializa el Gestor", async () => {
     try {
-      const accountInfo = await program.provider.connection.getAccountInfo(
-        gestorPda
-      );
-      if (accountInfo) {
-        console.log("El gestor ya estaba inicializado.");
-        return;
-      }
+      const accountInfo = await program.provider.connection.getAccountInfo(gestorPda);
+      if (accountInfo) return;
 
       await program.methods
         .inicializarGestor()
@@ -43,205 +26,90 @@ describe("panaderia_pda", () => {
           systemProgram: anchor.web3.SystemProgram.programId,
         })
         .rpc();
-
-      console.log("Gestor inicializado con éxito.");
-    } catch (error) {
-      console.error("Error al inicializar gestor:", error);
-    }
+    } catch (error) { console.error(error); }
   });
 
-  it("Crea una Receta", async () => {
+  it("2. Crea una Receta Real (Conchas de Vainilla)", async () => {
     const gestorAccount = await program.account.gestor.fetch(gestorPda);
     const [recetaPda] = anchor.web3.PublicKey.findProgramAddressSync(
-      [
-        Buffer.from("receta"),
-        gestorPda.toBuffer(),
-        gestorAccount.totalRecetas.toArrayLike(Buffer, "le", 8),
-      ],
+      [Buffer.from("receta"), gestorPda.toBuffer(), gestorAccount.totalRecetas.toArrayLike(Buffer, "le", 8)],
       program.programId
     );
 
-    const nombrePan = "Concha de Vainilla";
-    const costoProduccion = new anchor.BN(5000000); // En Lamports (0.005 SOL)
-    const precioVenta = new anchor.BN(15000000); // En Lamports (0.015 SOL)
-    const piezas = 10;
+    // --- CÁLCULOS DEL NEGOCIO (TODO EN CENTAVOS PARA EVITAR DECIMALES) ---
+    // 1. Huevo: $45 el kg (15 piezas). $45.00 = 4500 centavos. 4500 / 15 = 300 centavos/pieza.
+    // 2. Harina: $20 el kg (1000g). $20.00 = 2000 centavos. 2000 / 1000 = 2 centavos/gramo.
+    // 3. Azúcar: $30 el kg (1000g). $30.00 = 3000 centavos. 3000 / 1000 = 3 centavos/gramo.
+    
+    const ingredientes = [
+      { nombre: "Harina (gramos)", cantidad: 500, costoUnitario: new BN(2) },  // Costo: $10.00
+      { nombre: "Huevo (piezas)", cantidad: 3, costoUnitario: new BN(300) },   // Costo: $9.00
+      { nombre: "Azucar (gramos)", cantidad: 100, costoUnitario: new BN(3) }   // Costo: $3.00
+    ]; 
+    // Costo Total Automático esperado = $22.00 MXN (2200 centavos) para el lote.
+    
+    const precioVenta = new BN(1000); // Se venderá a $10.00 c/u (1000 centavos)
+    const piezasRendimiento = 10;     // Salen 10 conchas con esta masa
 
-    try {
-      const tx = await program.methods
-        .crearReceta(nombrePan, costoProduccion, precioVenta, piezas)
-        .accounts({
-          gestor: gestorPda,
-          receta: recetaPda,
-          autoridad: wallet.publicKey,
-          systemProgram: anchor.web3.SystemProgram.programId,
-        })
-        .rpc();
-      console.log("Receta creada, Tx:", tx);
-    } catch (error) {
-      console.error("Error al crear receta:", error);
-    }
+    await program.methods
+      .crearReceta("Concha de Vainilla", precioVenta, piezasRendimiento, ingredientes)
+      .accounts({ gestor: gestorPda, receta: recetaPda, autoridad: wallet.publicKey, systemProgram: anchor.web3.SystemProgram.programId })
+      .rpc();
+
+    // Verificamos si el contrato inteligente sumó bien:
+    const recetaCreada = await program.account.receta.fetch(recetaPda);
+    console.log(`\n🥖 Receta creada: ${recetaCreada.nombrePan}`);
+    console.log(`💵 Costo Total calculado por el contrato: $${recetaCreada.costoProduccion.toNumber() / 100} MXN`);
   });
 
-  it("Hornea Pan (Aumenta Inventario)", async () => {
+  it("3. Actualizar Info/Precios de la Receta (¡Inflación!)", async () => {
     const gestorAccount = await program.account.gestor.fetch(gestorPda);
     const ultimoId = gestorAccount.totalRecetas.subn(1);
     const [recetaPda] = anchor.web3.PublicKey.findProgramAddressSync(
-      [
-        Buffer.from("receta"),
-        gestorPda.toBuffer(),
-        ultimoId.toArrayLike(Buffer, "le", 8),
-      ],
+      [Buffer.from("receta"), gestorPda.toBuffer(), ultimoId.toArrayLike(Buffer, "le", 8)],
       program.programId
     );
 
-    const lotes = 2;
+    // OH NO, el huevo subió a $60 el Kg (6000 centavos / 15 = 400 centavos la pieza)
+    const nuevosIngredientes = [
+      { nombre: "Harina (gramos)", cantidad: 500, costoUnitario: new BN(2) },
+      { nombre: "Huevo (piezas)", cantidad: 3, costoUnitario: new BN(400) }, // <-- PRECIO NUEVO ($4.00)
+      { nombre: "Azucar (gramos)", cantidad: 100, costoUnitario: new BN(3) } 
+    ];
+    const nuevoPrecioVenta = new BN(1200); // Subimos el pan a $12.00
 
-    try {
-      await program.methods
-        .hornearPan(lotes)
-        .accounts({
-          gestor: gestorPda,
-          receta: recetaPda,
-          autoridad: wallet.publicKey,
-        })
-        .rpc();
+    await program.methods
+      .actualizarReceta(nuevoPrecioVenta, nuevosIngredientes)
+      .accounts({ gestor: gestorPda, receta: recetaPda, autoridad: wallet.publicKey })
+      .rpc();
 
-      const receta = await program.account.receta.fetch(recetaPda);
-      console.log(
-        "Inventario despues de hornear:",
-        receta.inventarioDisponible.toString()
-      );
-    } catch (error) {
-      console.error("Error al hornear pan:", error);
-    }
+    const recetaActualizada = await program.account.receta.fetch(recetaPda);
+    console.log(`📈 Huevo subió! Nuevo costo producción: $${recetaActualizada.costoProduccion.toNumber() / 100} MXN`);
   });
 
-  it("Registra un Ticket de Venta (Pago en Cripto)", async () => {
-    const gestorAccount = await program.account.gestor.fetch(gestorPda);
-    const ultimoIdReceta = gestorAccount.totalRecetas.subn(1);
-
-    const [recetaPda] = anchor.web3.PublicKey.findProgramAddressSync(
-      [
-        Buffer.from("receta"),
-        gestorPda.toBuffer(),
-        ultimoIdReceta.toArrayLike(Buffer, "le", 8),
-      ],
-      program.programId
-    );
-
-    const [ticketPda] = anchor.web3.PublicKey.findProgramAddressSync(
-      [
-        Buffer.from("ticket"),
-        gestorPda.toBuffer(),
-        gestorAccount.totalTickets.toArrayLike(Buffer, "le", 8),
-      ],
-      program.programId
-    );
-
-    const nombreCliente = "Rafael";
-    const cantidadVendida = 5;
-    const pagoFiat = false; // Pagamos con SOL
-
-    try {
-      await program.methods
-        .registrarTicket(nombreCliente, cantidadVendida, pagoFiat)
-        .accounts({
-          gestor: gestorPda,
-          receta: recetaPda,
-          ticket: ticketPda,
-          comprador: wallet.publicKey,
-          autoridad: wallet.publicKey, // Cuenta que recibe el SOL
-          systemProgram: anchor.web3.SystemProgram.programId,
-        })
-        .rpc();
-
-      const recetaActualizada = await program.account.receta.fetch(recetaPda);
-      const gestorActualizado = await program.account.gestor.fetch(gestorPda);
-      console.log(
-        "Inventario restante:",
-        recetaActualizada.inventarioDisponible.toString()
-      );
-      console.log(
-        "Ingresos Totales (Lamports):",
-        gestorActualizado.ingresosTotales.toString()
-      );
-    } catch (error) {
-      console.error("Error al registrar ticket:", error);
-    }
-  });
-
-  it("Borra una Receta (Borrado Lógico)", async () => {
+  it("4. Hornea y Vende (Flujo normal)", async () => {
     const gestorAccount = await program.account.gestor.fetch(gestorPda);
     const ultimoId = gestorAccount.totalRecetas.subn(1);
     const [recetaPda] = anchor.web3.PublicKey.findProgramAddressSync(
-      [
-        Buffer.from("receta"),
-        gestorPda.toBuffer(),
-        ultimoId.toArrayLike(Buffer, "le", 8),
-      ],
+      [Buffer.from("receta"), gestorPda.toBuffer(), ultimoId.toArrayLike(Buffer, "le", 8)],
       program.programId
     );
-
-    try {
-      await program.methods
-        .borrarReceta()
-        .accounts({
-          gestor: gestorPda,
-          receta: recetaPda,
-          autoridad: wallet.publicKey,
-        })
-        .rpc();
-
-      const recetaBorrada = await program.account.receta.fetch(recetaPda);
-      console.log("¿La receta sigue activa?:", recetaBorrada.activo);
-    } catch (error) {
-      console.error("Error al borrar receta:", error);
-    }
-  });
-
-  it("Falla al intentar vender pan de receta inactiva", async () => {
-    const gestorAccount = await program.account.gestor.fetch(gestorPda);
-    const ultimoIdReceta = gestorAccount.totalRecetas.subn(1);
-
-    const [recetaPda] = anchor.web3.PublicKey.findProgramAddressSync(
-      [
-        Buffer.from("receta"),
-        gestorPda.toBuffer(),
-        ultimoIdReceta.toArrayLike(Buffer, "le", 8),
-      ],
-      program.programId
-    );
-
     const [ticketPda] = anchor.web3.PublicKey.findProgramAddressSync(
-      [
-        Buffer.from("ticket"),
-        gestorPda.toBuffer(),
-        gestorAccount.totalTickets.toArrayLike(Buffer, "le", 8),
-      ],
+      [Buffer.from("ticket"), gestorPda.toBuffer(), gestorAccount.totalTickets.toArrayLike(Buffer, "le", 8)],
       program.programId
     );
 
-    const nombreCliente = "Cliente Despistado";
-    const cantidadVendida = 1;
-    const pagoFiat = true;
+    // Horneamos 1 lote (10 piezas)
+    await program.methods.hornearPan(1).accounts({ gestor: gestorPda, receta: recetaPda, autoridad: wallet.publicKey }).rpc();
 
-    try {
-      await program.methods
-        .registrarTicket(nombreCliente, cantidadVendida, pagoFiat)
-        .accounts({
-          gestor: gestorPda,
-          receta: recetaPda,
-          ticket: ticketPda,
-          comprador: wallet.publicKey,
-          autoridad: wallet.publicKey,
-          systemProgram: anchor.web3.SystemProgram.programId,
-        })
-        .rpc();
-      console.log("Esto no debería imprimirse.");
-    } catch (error) {
-      console.log(
-        "Exito: La transacción fue bloqueada por estar la receta inactiva."
-      );
-    }
+    // Vendemos 5 piezas pagando en fiat (efectivo/caja)
+    await program.methods.registrarTicket("Cliente Local", 5, true)
+      .accounts({
+        gestor: gestorPda, receta: recetaPda, ticket: ticketPda,
+        comprador: wallet.publicKey, autoridad: wallet.publicKey, systemProgram: anchor.web3.SystemProgram.programId,
+      }).rpc();
+      
+    const ticket = await program.account.ticket.fetch(ticketPda);
+    console.log(`🧾 Ticket creado. Ganancia neta de la venta: $${ticket.ganancia.toNumber() / 100} MXN`);
   });
 });

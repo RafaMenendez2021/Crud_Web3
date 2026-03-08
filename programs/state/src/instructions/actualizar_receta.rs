@@ -3,13 +3,21 @@ use crate::state::*;
 
 pub fn handler_actualizar_receta(
     ctx: Context<ActualizarReceta>,
-    nuevo_costo_produccion: u64,
     nuevo_precio_venta: u64,
+    nuevos_ingredientes: Vec<Ingrediente>,
 ) -> Result<()> {
     let receta = &mut ctx.accounts.receta;
 
-    receta.costo_produccion = nuevo_costo_produccion;
+    // Recalcular el costo con los nuevos precios/cantidades
+    let mut costo_total: u64 = 0;
+    for ing in nuevos_ingredientes.iter() {
+        let costo_ingrediente = (ing.cantidad as u64).checked_mul(ing.costo_unitario).unwrap();
+        costo_total = costo_total.checked_add(costo_ingrediente).unwrap();
+    }
+
     receta.precio_venta = nuevo_precio_venta;
+    receta.costo_produccion = costo_total;
+    receta.ingredientes = nuevos_ingredientes;
 
     Ok(())
 }
