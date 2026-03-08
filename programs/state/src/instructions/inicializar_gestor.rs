@@ -6,6 +6,7 @@ pub fn handler_inicializar_gestor(ctx: Context<InicializarGestor>) -> Result<()>
     gestor.autoridad = ctx.accounts.autoridad.key();
     gestor.total_recetas = 0;
     gestor.total_tickets = 0;
+    gestor.ingresos_totales = 0;
     Ok(())
 }
 
@@ -14,7 +15,7 @@ pub struct InicializarGestor<'info> {
     #[account(
         init,
         payer = autoridad,
-        space = 8 + 32 + 8 + 8,
+        space = 8 + 32 + 8 + 8 + 8,
         seeds = [b"gestor", autoridad.key().as_ref()],
         bump
     )]

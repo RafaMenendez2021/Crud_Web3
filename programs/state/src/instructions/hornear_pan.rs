@@ -7,6 +7,8 @@ pub fn handler_hornear_pan(
 ) -> Result<()> {
     let receta = &mut ctx.accounts.receta;
     
+    require!(receta.activo, PanaderiaError::RecetaInactiva);
+    
     let piezas_horneadas = (receta.piezas as u32).checked_mul(lotes as u32).unwrap();
     receta.inventario_disponible = receta.inventario_disponible.checked_add(piezas_horneadas).unwrap();
 

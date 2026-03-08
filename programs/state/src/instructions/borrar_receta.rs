@@ -2,6 +2,8 @@ use anchor_lang::prelude::*;
 use crate::state::*;
 
 pub fn handler_borrar_receta(_ctx: Context<BorrarReceta>) -> Result<()> {
+    let receta = &mut _ctx.accounts.receta;
+    receta.activo = false;
     Ok(())
 }
 
@@ -11,7 +13,6 @@ pub struct BorrarReceta<'info> {
     pub gestor: Account<'info, Gestor>,
     #[account(
         mut,
-        close = autoridad,
         seeds = [b"receta", gestor.key().as_ref(), &receta.id.to_le_bytes()],
         bump
     )]

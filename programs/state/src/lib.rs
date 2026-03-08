@@ -33,9 +33,9 @@ pub mod panaderia_pda {
         ctx: Context<RegistrarTicket>,
         nombre_cliente: String,
         cantidad_vendida: u8,
-        ganancia_calculada: u64,
+        pago_fiat: bool,
     ) -> Result<()> {
-        handler_registrar_ticket(ctx, nombre_cliente, cantidad_vendida, ganancia_calculada)
+        handler_registrar_ticket(ctx, nombre_cliente, cantidad_vendida, pago_fiat)
     }
 
     pub fn actualizar_receta(

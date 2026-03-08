@@ -18,6 +18,7 @@ pub fn handler_crear_receta(
     receta.precio_venta = precio_venta;
     receta.piezas = piezas;
     receta.inventario_disponible = 0;
+    receta.activo = true;
 
     gestor.total_recetas = gestor.total_recetas.checked_add(1).unwrap();
     Ok(())
@@ -31,7 +32,7 @@ pub struct CrearReceta<'info> {
     #[account(
         init,
         payer = autoridad,
-        space = 8 + 32 + 8 + 36 + 8 + 8 + 1 + 4,
+        space = 8 + 32 + 8 + 36 + 8 + 8 + 1 + 4 + 1,
         seeds = [b"receta", gestor.key().as_ref(), &gestor.total_recetas.to_le_bytes()],
         bump
     )]
