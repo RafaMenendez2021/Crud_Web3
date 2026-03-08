@@ -7,6 +7,7 @@ describe("panaderia_pda", () => {
   let gestorPda: anchor.web3.PublicKey;
 
   before(async () => {
+    // Calculamos la direccion unica de la panaderia basandonos en el dueño
     [gestorPda] = anchor.web3.PublicKey.findProgramAddressSync(
       [Buffer.from("gestor"), wallet.publicKey.toBuffer()],
       program.programId
@@ -16,6 +17,7 @@ describe("panaderia_pda", () => {
   it("1. Inicializa el Gestor", async () => {
     try {
       const accountInfo = await program.provider.connection.getAccountInfo(gestorPda);
+      // Si la panaderia ya existe, no hacemos nada para evitar errores
       if (accountInfo) return;
 
       await program.methods
@@ -36,33 +38,34 @@ describe("panaderia_pda", () => {
       program.programId
     );
 
-    // --- CÁLCULOS DEL NEGOCIO (TODO EN CENTAVOS PARA EVITAR DECIMALES) ---
-    // 1. Huevo: $45 el kg (15 piezas). $45.00 = 4500 centavos. 4500 / 15 = 300 centavos/pieza.
-    // 2. Harina: $20 el kg (1000g). $20.00 = 2000 centavos. 2000 / 1000 = 2 centavos/gramo.
-    // 3. Azúcar: $30 el kg (1000g). $30.00 = 3000 centavos. 3000 / 1000 = 3 centavos/gramo.
+    // Estandarizacion de medidas a centavos para no perder precision:
+    // Huevo: 45 pesos el kg (15 piezas). 4500 centavos / 15 = 300 centavos por pieza.
+    // Harina: 20 pesos el kg (1000g). 2000 centavos / 1000 = 2 centavos por gramo.
+    // Azucar: 30 pesos el kg (1000g). 3000 centavos / 1000 = 3 centavos por gramo.
     
     const ingredientes = [
-      { nombre: "Harina (gramos)", cantidad: 500, costoUnitario: new BN(2) },  // Costo: $10.00
-      { nombre: "Huevo (piezas)", cantidad: 3, costoUnitario: new BN(300) },   // Costo: $9.00
-      { nombre: "Azucar (gramos)", cantidad: 100, costoUnitario: new BN(3) }   // Costo: $3.00
+      { nombre: "Harina (gramos)", cantidad: 500, costoUnitario: new BN(2) },  // Costo: 10 pesos
+      { nombre: "Huevo (piezas)", cantidad: 3, costoUnitario: new BN(300) },   // Costo: 9 pesos
+      { nombre: "Azucar (gramos)", cantidad: 100, costoUnitario: new BN(3) }   // Costo: 3 pesos
     ]; 
-    // Costo Total Automático esperado = $22.00 MXN (2200 centavos) para el lote.
+    // Al final, el sistema deberia calcular automaticamente 22 pesos en total.
     
-    const precioVenta = new BN(1000); // Se venderá a $10.00 c/u (1000 centavos)
-    const piezasRendimiento = 10;     // Salen 10 conchas con esta masa
+    // El pan se vendera a 10 pesos cada uno.
+    const precioVenta = new BN(1000); 
+    // Con esta receta obtenemos 10 conchas.
+    const piezasRendimiento = 10;     
 
     await program.methods
       .crearReceta("Concha de Vainilla", precioVenta, piezasRendimiento, ingredientes)
       .accounts({ gestor: gestorPda, receta: recetaPda, autoridad: wallet.publicKey, systemProgram: anchor.web3.SystemProgram.programId })
       .rpc();
 
-    // Verificamos si el contrato inteligente sumó bien:
     const recetaCreada = await program.account.receta.fetch(recetaPda);
-    console.log(`\n🥖 Receta creada: ${recetaCreada.nombrePan}`);
-    console.log(`💵 Costo Total calculado por el contrato: $${recetaCreada.costoProduccion.toNumber() / 100} MXN`);
+    console.log(`Receta creada: ${recetaCreada.nombrePan}`);
+    console.log(`Costo total calculado por el contrato: $${recetaCreada.costoProduccion.toNumber() / 100} MXN`);
   });
 
-  it("3. Actualizar Info/Precios de la Receta (¡Inflación!)", async () => {
+  it("3. Actualizar Info de la Receta por Inflacion", async () => {
     const gestorAccount = await program.account.gestor.fetch(gestorPda);
     const ultimoId = gestorAccount.totalRecetas.subn(1);
     const [recetaPda] = anchor.web3.PublicKey.findProgramAddressSync(
@@ -70,13 +73,14 @@ describe("panaderia_pda", () => {
       program.programId
     );
 
-    // OH NO, el huevo subió a $60 el Kg (6000 centavos / 15 = 400 centavos la pieza)
+    // Simulamos que el precio del huevo subio a 60 pesos el kilo (4 pesos la pieza)
     const nuevosIngredientes = [
       { nombre: "Harina (gramos)", cantidad: 500, costoUnitario: new BN(2) },
-      { nombre: "Huevo (piezas)", cantidad: 3, costoUnitario: new BN(400) }, // <-- PRECIO NUEVO ($4.00)
+      { nombre: "Huevo (piezas)", cantidad: 3, costoUnitario: new BN(400) }, 
       { nombre: "Azucar (gramos)", cantidad: 100, costoUnitario: new BN(3) } 
     ];
-    const nuevoPrecioVenta = new BN(1200); // Subimos el pan a $12.00
+    // Ajustamos el precio de venta a 12 pesos para compensar.
+    const nuevoPrecioVenta = new BN(1200); 
 
     await program.methods
       .actualizarReceta(nuevoPrecioVenta, nuevosIngredientes)
@@ -84,10 +88,10 @@ describe("panaderia_pda", () => {
       .rpc();
 
     const recetaActualizada = await program.account.receta.fetch(recetaPda);
-    console.log(`📈 Huevo subió! Nuevo costo producción: $${recetaActualizada.costoProduccion.toNumber() / 100} MXN`);
+    console.log(`El huevo subio. Nuevo costo de produccion: $${recetaActualizada.costoProduccion.toNumber() / 100} MXN`);
   });
 
-  it("4. Hornea y Vende (Flujo normal)", async () => {
+  it("4. Hornea y Vende el producto", async () => {
     const gestorAccount = await program.account.gestor.fetch(gestorPda);
     const ultimoId = gestorAccount.totalRecetas.subn(1);
     const [recetaPda] = anchor.web3.PublicKey.findProgramAddressSync(
@@ -99,10 +103,10 @@ describe("panaderia_pda", () => {
       program.programId
     );
 
-    // Horneamos 1 lote (10 piezas)
+    // Mandamos a hornear un lote para tener inventario disponible.
     await program.methods.hornearPan(1).accounts({ gestor: gestorPda, receta: recetaPda, autoridad: wallet.publicKey }).rpc();
 
-    // Vendemos 5 piezas pagando en fiat (efectivo/caja)
+    // Registramos la venta de la mitad del lote pagando en la caja registradora fisica (fiat).
     await program.methods.registrarTicket("Cliente Local", 5, true)
       .accounts({
         gestor: gestorPda, receta: recetaPda, ticket: ticketPda,
@@ -110,6 +114,6 @@ describe("panaderia_pda", () => {
       }).rpc();
       
     const ticket = await program.account.ticket.fetch(ticketPda);
-    console.log(`🧾 Ticket creado. Ganancia neta de la venta: $${ticket.ganancia.toNumber() / 100} MXN`);
+    console.log(`Ticket creado con exito. Ganancia neta de la venta: $${ticket.ganancia.toNumber() / 100} MXN`);
   });
 });
