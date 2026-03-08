@@ -3,7 +3,7 @@ seeds = false
 skip-lint = false
 
 [programs.localnet]
-state = "6aeYwtW7bXN3cxLb6GYXw2ovmSTiVDyFbrGxgBRxoQJE"
+state = "G2meTE2hu5K9dEKTiKakETMJP393KisRch4nguFCHVa"
 
 [registry]
 url = "https://api.apr.dev"
