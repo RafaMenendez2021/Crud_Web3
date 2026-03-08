@@ -3,7 +3,11 @@ use crate::state::*;
 
 pub fn handler_borrar_receta(_ctx: Context<BorrarReceta>) -> Result<()> {
     let receta = &mut _ctx.accounts.receta;
+    
+    // En lugar de destruir los datos por completo, solo apagamos la receta.
+    // Asi el historial de ventas pasadas sigue teniendo sentido.
     receta.activo = false;
+    
     Ok(())
 }
 
